@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "refusal-direction"
+version = "0.1.0"
+description = "Replication of 'Refusal in Language Models Is Mediated by a Single Direction' (Arditi et al., 2024) on Qwen2.5-1.5B-Instruct"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.6",
+    # TransformerLens 3.x/4.x replaced HookedTransformer with TransformerBridge.
+    # 2.18 is the last release with the HookedTransformer API most tutorials use.
+    "transformer_lens==2.18.0",
+    "transformers>=4.57,<5",
+    "datasets>=3,<4",
+    "einops",
+    "pandas",
+    "matplotlib",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+gcg = ["nanogcg"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
