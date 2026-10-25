@@ -32,4 +32,8 @@ def orthogonalize_weights(model, direction: torch.Tensor) -> None:
     d_model -- including a bias vector. Use param.data.copy_(...) to write in place.
     Afterwards, the model needs no hooks at all.
     """
-    raise NotImplementedError("Exercise 5: orthogonalize W_E, every W_O/b_O and W_out/b_out")
+    params = [model.W_E]
+    for block in model.blocks:
+        params += [block.attn.W_O, block.attn.b_O, block.mlp.W_out, block.mlp.b_out]
+    for p in params:
+        p.data.copy_(project_out(p.data, direction))

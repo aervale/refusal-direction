@@ -31,7 +31,9 @@ def project_out(x: torch.Tensor, direction: torch.Tensor) -> torch.Tensor:
     Gotchas: activations are often fp16/bf16 while the direction is float32, and they may
     live on different devices. Do the math in x's dtype/device.
     """
-    raise NotImplementedError("Exercise 1a: implement x - r_hat r_hat^T x")
+    r_hat = direction.to(device=x.device, dtype=x.dtype)
+    r_hat = r_hat / r_hat.norm()
+    return x - (x @ r_hat)[..., None] * r_hat
 
 
 def get_ablation_hooks(model, direction: torch.Tensor) -> list[tuple[str, callable]]:
@@ -44,7 +46,14 @@ def get_ablation_hooks(model, direction: torch.Tensor) -> list[tuple[str, callab
     Question to think about: why isn't hooking resid_pre alone enough to guarantee the
     final residual stream (what the unembedding reads) has no r_hat component?
     """
-    raise NotImplementedError("Exercise 1b: return a list of (hook_name, hook_fn) pairs")
+    def hook_fn(activation, hook):
+        return project_out(activation, direction)
+
+    hooks = []
+    for layer in range(model.cfg.n_layers):
+        for name in ("hook_resid_pre", "hook_attn_out", "hook_mlp_out"):
+            hooks.append((f"blocks.{layer}.{name}", hook_fn))
+    return hooks
 
 
 def get_addition_hooks(model, direction: torch.Tensor, layer: int, coeff: float = 1.0) -> list[tuple[str, callable]]:
@@ -53,4 +62,7 @@ def get_addition_hooks(model, direction: torch.Tensor, layer: int, coeff: float 
     Use the direction as given (do not normalize). coeff=-1 subtracts it, which is the
     paper's other way to bypass refusal -- try it later.
     """
-    raise NotImplementedError("Exercise 2: return [(hook_name, hook_fn)]")
+    def hook_fn(activation, hook):
+        return activation + coeff * direction.to(device=activation.device, dtype=activation.dtype)
+
+    return [(f"blocks.{layer}.hook_resid_pre", hook_fn)]

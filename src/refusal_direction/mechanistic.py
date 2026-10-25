@@ -22,7 +22,20 @@ def projection_by_layer(model, tokens, attention_mask, direction, position: int 
     (Hook every blocks.{l}.hook_resid_pre; same pattern as directions.get_mean_activations,
     but keep per-prompt values instead of summing.)
     """
-    raise NotImplementedError("Exercise 6a")
+    r_hat = (direction / direction.norm()).float().to(model.cfg.device)
+    out = []
+    for b in batches(tokens.shape[0], batch_size):
+        per_layer = {}
+
+        def make_hook(layer):
+            def hook_fn(activation, hook):
+                per_layer[layer] = activation[:, position, :].float() @ r_hat
+            return hook_fn
+
+        hooks = [(f"blocks.{l}.hook_resid_pre", make_hook(l)) for l in range(model.cfg.n_layers)]
+        model.run_with_hooks(tokens[b], attention_mask=attention_mask[b], fwd_hooks=hooks, stop_at_layer=model.cfg.n_layers)
+        out.append(torch.stack([per_layer[l] for l in range(model.cfg.n_layers)], dim=1))
+    return torch.cat(out)
 
 
 @torch.no_grad()
@@ -41,7 +54,22 @@ def head_contributions(model, tokens, attention_mask, direction, position: int =
     Efficiency hint: you never need the d_model-sized head outputs. W_O[h] @ r_hat is a
     d_head vector, so precompute those once per layer.
     """
-    raise NotImplementedError("Exercise 6b")
+    r_hat = (direction / direction.norm()).float().to(model.cfg.device)
+    # [n_layers, n_heads, d_head]: what each head's z would need to point along to write r_hat
+    w = torch.stack([block.attn.W_O.float() @ r_hat for block in model.blocks])
+    out = []
+    for b in batches(tokens.shape[0], batch_size):
+        per_layer = {}
+
+        def make_hook(layer):
+            def hook_fn(z, hook):
+                per_layer[layer] = torch.einsum("bhd,hd->bh", z[:, position].float(), w[layer])
+            return hook_fn
+
+        hooks = [(f"blocks.{l}.attn.hook_z", make_hook(l)) for l in range(model.cfg.n_layers)]
+        model.run_with_hooks(tokens[b], attention_mask=attention_mask[b], fwd_hooks=hooks, stop_at_layer=model.cfg.n_layers)
+        out.append(torch.stack([per_layer[l] for l in range(model.cfg.n_layers)], dim=1))
+    return torch.cat(out)
 
 
 @torch.no_grad()

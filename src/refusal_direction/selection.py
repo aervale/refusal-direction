@@ -83,4 +83,12 @@ def select_direction(scores: pd.DataFrame, n_layers: int, cfg) -> pd.Series:
     Then think: which of these filters do you expect to matter most for a 1.5B model?
     Look at the plot in notebook 01 and check.
     """
-    raise NotImplementedError("Exercise 4: filter candidates, then take the min bypass_score")
+    ok = (
+        (scores.induce_score > cfg.induce_threshold)
+        & (scores.kl_score < cfg.kl_threshold)
+        & (scores.layer < cfg.prune_layer_fraction * n_layers)
+    )
+    survivors = scores[ok]
+    if survivors.empty:
+        raise ValueError("No candidate passed the filters; inspect `scores` and consider loosening thresholds.")
+    return survivors.loc[survivors.bypass_score.idxmin()]

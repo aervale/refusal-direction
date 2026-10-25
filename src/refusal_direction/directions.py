@@ -31,12 +31,23 @@ def get_mean_activations(model, tokens, attention_mask, positions: list[int], ba
     Either way, pass attention_mask to the model.
     Accumulate in float32: summing hundreds of fp16 activations loses precision.
     """
-    raise NotImplementedError("Exercise 3a: compute mean resid_pre activations at each (position, layer)")
+    n_layers, d_model = model.cfg.n_layers, model.cfg.d_model
+    total = torch.zeros(len(positions), n_layers, d_model, dtype=torch.float32, device=model.cfg.device)
+
+    def make_hook(layer):
+        def hook_fn(activation, hook):
+            total[:, layer] += activation[:, positions, :].float().sum(dim=0)
+        return hook_fn
+
+    hooks = [(f"blocks.{l}.hook_resid_pre", make_hook(l)) for l in range(n_layers)]
+    for b in batches(tokens.shape[0], batch_size):
+        model.run_with_hooks(tokens[b], attention_mask=attention_mask[b], fwd_hooks=hooks, stop_at_layer=n_layers)
+    return total / tokens.shape[0]
 
 
 def diff_in_means(mean_harmful: torch.Tensor, mean_harmless: torch.Tensor) -> torch.Tensor:
     """Exercise 3b. One line. Why harmful - harmless and not the other way round?"""
-    raise NotImplementedError("Exercise 3b")
+    return mean_harmful - mean_harmless
 
 
 def get_candidate_directions(model, harmful, harmless, positions, batch_size=16) -> torch.Tensor:
